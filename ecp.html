@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light}[hidden]{display:none!important}img{max-width:100%}</style>
+<title>Corredor Control Plane</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one narrative column; the walkthrough is a sticky phone beside step content, driven by a stepper colored by who acts. */
+:root{
+  --bg:#f4f6f3; --surface:#ffffff; --ink:#16201d; --muted:#5b6863; --line:#dde2dd;
+  --rule:#1f5c4f; --rule-soft:#e0eee9; --on-rule:#ffffff;
+  --model:#a65f00; --model-fill:#e39a2d; --model-soft:#fbefd9;
+  --jev:#5d3fcc; --jev-soft:#ebe6fb; --on-jev:#ffffff;
+  --bad:#b3261e; --bad-soft:#fbe9e7; --ok:#21714c; --ok-soft:#e1f2e8;
+  --chat:#ebe4d7; --bubble:#ffffff; --mine:#d7f2cd; --mine-ink:#16201d;
+  --f-display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --f-body:"Source Sans 3",ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#101513; --surface:#18201d; --ink:#e6ece9; --muted:#9ba8a2; --line:#2a3430;
+  --rule:#6cc3ad; --rule-soft:#173029; --on-rule:#0e1a16;
+  --model:#f0ab45; --model-fill:#e39a2d; --model-soft:#36270f;
+  --jev:#a793ff; --jev-soft:#251f48; --on-jev:#120c2b;
+  --bad:#f28b82; --bad-soft:#3a1c1a; --ok:#6fd19f; --ok-soft:#14301f;
+  --chat:#0c1311; --bubble:#1e2925; --mine:#1d4a39; --mine-ink:#e6ece9; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101513; --surface:#18201d; --ink:#e6ece9; --muted:#9ba8a2; --line:#2a3430;
+  --rule:#6cc3ad; --rule-soft:#173029; --on-rule:#0e1a16;
+  --model:#f0ab45; --model-fill:#e39a2d; --model-soft:#36270f;
+  --jev:#a793ff; --jev-soft:#251f48; --on-jev:#120c2b;
+  --bad:#f28b82; --bad-soft:#3a1c1a; --ok:#6fd19f; --ok-soft:#14301f;
+  --chat:#0c1311; --bubble:#1e2925; --mine:#1d4a39; --mine-ink:#e6ece9; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:17px/1.55 var(--f-body);margin:0}
+.wrap{max-width:1120px;margin:0 auto;padding-inline:20px;padding-block:40px 64px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;letter-spacing:-.01em}
+h1{font-size:clamp(34px,5vw,54px);line-height:1.05;font-weight:700}
+h2{font-size:clamp(26px,3.2vw,34px);line-height:1.15;font-weight:700}
+h3{font-size:21px;line-height:1.25;font-weight:700}
+p{margin:0}
+.eyebrow{font:500 12px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.lede{max-width:64ch;color:var(--muted);font-size:18px}
+section{display:flex;flex-direction:column;gap:18px;margin-top:72px}
+a{color:var(--rule)}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--jev);outline-offset:2px}
+
+/* role chips */
+.who{display:inline-flex;align-items:center;gap:6px;font:500 11.5px var(--f-mono);letter-spacing:.03em;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.who::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.who.jev{background:var(--jev-soft);color:var(--jev)}
+.who.rule{background:var(--rule-soft);color:var(--rule)}
+.who.model{background:var(--model-soft);color:var(--model)}
+
+/* hero */
+header{display:flex;flex-direction:column;gap:18px;max-width:820px}
+.thesis{font-family:var(--f-display);font-size:clamp(22px,2.6vw,28px);line-height:1.3;font-weight:500}
+.thesis .p{color:var(--rule)} .thesis .m{color:var(--model)}
+
+/* three layers */
+.layers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media(max-width:760px){.layers{grid-template-columns:1fr}}
+.layer{border-top:4px solid var(--c);padding-top:14px;display:flex;flex-direction:column;gap:8px}
+.layer .verb{font:500 12px var(--f-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--c)}
+.layer p{color:var(--muted);font-size:16px}
+.layer ul{margin:0;padding-left:18px;font-size:15.5px}
+.cast{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;font-size:15px;color:var(--muted)}
+.cast span.who{font-size:12px}
+.cast .pair{display:inline-flex;gap:8px;align-items:center}
+
+/* walkthrough */
+.stepper{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;position:sticky;top:env(safe-area-inset-top,0px);z-index:3;background:var(--bg);padding-block:10px}
+@media(max-width:760px){.stepper{grid-template-columns:repeat(3,minmax(0,1fr));position:static}}
+.stepper button{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:6px;min-width:0}
+.stepper button b{font:600 14px/1.2 var(--f-body)}
+.stepper button .n{font:500 11px var(--f-mono);color:var(--muted)}
+.stepper .dots{display:flex;gap:4px}
+.stepper .dots i{width:8px;height:8px;border-radius:50%}
+.dots .jev{background:var(--jev)} .dots .rule{background:var(--rule)} .dots .model{background:var(--model-fill)}
+.stepper button[aria-selected="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.walk{display:grid;grid-template-columns:340px minmax(0,1fr);gap:32px;align-items:start}
+@media(max-width:860px){.walk{grid-template-columns:1fr}.walk .phone{order:2}}
+.walk .phone{position:sticky;top:110px}
+@media(max-width:860px){.walk .phone{position:static}}
+.stage{display:flex;flex-direction:column;gap:18px;min-width:0}
+.stage .head{display:flex;flex-direction:column;gap:8px}
+.stage .roles{display:flex;gap:6px;flex-wrap:wrap}
+.nav{display:flex;justify-content:space-between;gap:10px;margin-top:6px}
+.nav button{background:none;border:1px solid var(--line);border-radius:999px;padding:8px 16px;cursor:pointer;font-weight:600}
+.nav button.next{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.nav button:disabled{opacity:.35;cursor:default}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.panel.jevp{background:var(--jev-soft);border-color:transparent}
+.panel .ptitle{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.panel .ptitle strong{font-size:16px}
+.q{font-family:var(--f-display);font-size:18px;font-weight:500}
+.small{font-size:14.5px;color:var(--muted)}
+.illus{font:500 10.5px var(--f-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--jev);opacity:.85}
+.law{font:500 13px var(--f-mono);color:var(--muted);border-left:3px solid var(--line);padding-left:10px}
+
+/* bars */
+.bars{display:flex;flex-direction:column;gap:7px}
+.bar{display:grid;grid-template-columns:150px minmax(0,1fr) 44px;gap:10px;align-items:center;font-size:15px}
+@media(max-width:480px){.bar{grid-template-columns:110px minmax(0,1fr) 40px;font-size:14px}}
+.bar .track{height:10px;border-radius:5px;background:color-mix(in srgb,var(--jev) 14%,transparent)}
+.bar .fill{height:100%;border-radius:5px;background:var(--jev)}
+.bar .v{font:500 13px var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.bar.top b{font-weight:600}
+.meter{position:relative;height:30px;margin-top:22px}
+.meter .zones{display:flex;height:10px;border-radius:5px;overflow:hidden}
+.meter .zones div{height:100%}
+.meter .lbls{display:flex;font-size:12.5px;color:var(--muted);margin-top:6px}
+.meter .lbls span{flex:var(--w)}
+.meter .mark{position:absolute;top:-22px;transform:translateX(-50%);font:500 12px var(--f-mono);color:var(--jev);white-space:nowrap}
+.meter .mark::after{content:"";position:absolute;left:50%;top:18px;width:2px;height:16px;background:var(--jev);transform:translateX(-50%)}
+
+/* facts */
+.facts{display:flex;flex-direction:column}
+.fact{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.fact:first-child{border-top:0}
+.fact .src{font:500 12px var(--f-mono);color:var(--rule);background:var(--rule-soft);padding:2px 8px;border-radius:6px;white-space:nowrap;align-self:center}
+.fact.stale span:first-child{text-decoration:line-through;color:var(--muted)}
+.fact.stale .src{background:var(--bad-soft);color:var(--bad)}
+
+/* checklist */
+.checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+@media(max-width:480px){.checks{grid-template-columns:1fr}}
+.chk{display:flex;gap:8px;align-items:center;padding:8px 10px;border-radius:10px;background:var(--bg);font-size:15px}
+.chk i{font-style:normal;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:12px;flex:none}
+.chk.y i{background:var(--ok);color:var(--surface)} .chk.n i{border:2px solid var(--bad)}
+.verdict{display:flex;gap:10px;align-items:center;font-weight:600}
+.lockbtn{font-size:14px;padding:6px 14px;border-radius:8px;background:var(--line);color:var(--muted)}
+
+/* flow graph */
+.flow{display:flex;gap:0;align-items:stretch;overflow-x:auto;padding-bottom:4px}
+.node{flex:1 1 0;min-width:130px;border:2px solid var(--rule);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;background:var(--surface)}
+.node.opt{border-style:dashed;border-color:var(--muted)}
+.node.lock{border-color:var(--ink)}
+.node b{font-size:15px;line-height:1.2}
+.node small{font:500 11px var(--f-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.node .req{color:var(--rule)}
+.arrow{flex:none;width:18px;align-self:center;height:2px;background:var(--line)}
+
+/* contract */
+.contract{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media(max-width:560px){.contract{grid-template-columns:1fr}}
+.contract ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:15px}
+.contract li{display:flex;gap:8px}
+.contract .must li::before{content:"✓";color:var(--ok);font-weight:700}
+.contract .not li::before{content:"✕";color:var(--bad);font-weight:700}
+.toggle{display:flex;align-items:center;gap:12px;cursor:pointer;background:var(--model-soft);border-radius:12px;padding:12px 14px;border:0;text-align:left;width:100%}
+.toggle .sw{flex:none;width:42px;height:24px;border-radius:12px;background:var(--line);position:relative;transition:background .2s}
+.toggle .sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--surface);transition:transform .2s}
+.toggle[aria-pressed="true"] .sw{background:var(--model-fill)}
+.toggle[aria-pressed="true"] .sw::after{transform:translateX(18px)}
+.results{display:flex;flex-wrap:wrap;gap:6px}
+.res{font:500 12px var(--f-mono);padding:3px 8px;border-radius:6px;background:var(--bad-soft);color:var(--bad)}
+
+/* record timeline */
+.trail{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.trail li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;padding-bottom:10px;position:relative;font-size:15px}
+.trail li::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--c,var(--rule));margin:6px 0 0 6px}
+.trail li::after{content:"";position:absolute;left:10px;top:18px;bottom:0;width:2px;background:var(--line)}
+.trail li:last-child::after{display:none}
+.trail b{font-weight:600}
+.trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media(max-width:980px){.trio{grid-template-columns:1fr}}
+.quote{font-size:15px;padding:8px 12px;border-radius:10px;background:var(--bg);display:flex;flex-direction:column;gap:4px}
+.quote .tag{font:500 11.5px var(--f-mono)}
+.quote.wrong .tag{color:var(--bad)} .quote.right .tag{color:var(--ok)}
+
+/* phone */
+.phone{background:var(--surface);border:1px solid var(--line);border-radius:28px;overflow:hidden;box-shadow:0 18px 40px -24px rgba(0,0,0,.35);min-width:0}
+.ph-top{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--rule);color:var(--on-rule)}
+.ph-top .av{width:30px;height:30px;border-radius:50%;background:color-mix(in srgb,var(--on-rule) 22%,transparent);display:grid;place-items:center;font-weight:700;font-size:14px}
+.ph-top b{font-size:15px;display:block;line-height:1.1}
+.ph-top small{font-size:12px;opacity:.8}
+.lang{margin-left:auto;display:flex;border-radius:999px;padding:2px;background:color-mix(in srgb,var(--on-rule) 18%,transparent)}
+.lang button{border:0;background:none;color:var(--on-rule);font:600 11.5px var(--f-body);padding:3px 9px;border-radius:999px;cursor:pointer}
+.lang button[aria-pressed="true"]{background:var(--on-rule);color:var(--rule)}
+.chat{background:var(--chat);padding:14px 12px 16px;display:flex;flex-direction:column;gap:8px;min-height:440px}
+.b{background:var(--bubble);border-radius:4px 14px 14px 14px;padding:8px 11px;max-width:94%;font-size:14.5px;line-height:1.45;animation:pop .25s ease both}
+.b.me{align-self:flex-end;background:var(--mine);color:var(--mine-ink);border-radius:14px 4px 14px 14px}
+.b.ghost{background:transparent;border:1.5px dashed var(--muted);color:var(--muted);font:500 12px var(--f-mono);padding:12px 11px}
+.b.ghost.opt{opacity:.6}
+.b.rej{background:var(--bad-soft);border:1.5px dashed var(--bad)}
+.b.rej s{color:var(--bad)}
+.b.rej .why{font:500 11px var(--f-mono);color:var(--bad);margin-top:5px;display:block}
+.b .fix{font:500 11px var(--f-mono);color:var(--model);margin-top:5px;display:block}
+.note{align-self:center;font:500 11.5px var(--f-mono);color:var(--muted);background:color-mix(in srgb,var(--surface) 70%,transparent);border-radius:999px;padding:3px 10px;text-align:center;animation:pop .25s ease both}
+.note.jev{color:var(--jev)}
+.typing{align-self:flex-start;background:var(--bubble);border-radius:14px;padding:10px 12px;display:flex;gap:4px}
+.typing i{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:blink 1.2s infinite}
+.typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+.cta{margin-top:4px;text-align:center;border-radius:10px;padding:10px;font-weight:600;font-size:14.5px}
+.cta.on{background:var(--rule);color:var(--on-rule)}
+.cta.off{background:var(--line);color:var(--muted)}
+.es{display:none}.show-es .es{display:inline}.show-es .en{display:none}
+@keyframes pop{from{opacity:.4;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes blink{0%,100%{opacity:.3}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* scenarios */
+.scen{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;align-items:start}
+@media(max-width:1000px){.scen{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.scen{grid-template-columns:1fr}}
+.sc{display:flex;flex-direction:column;gap:10px;min-width:0}
+.sc h3{font-size:18px}
+.sc .cap{font-size:15px;color:var(--muted)}
+.sc .phone{border-radius:20px}
+.sc .chat{min-height:0;padding:10px 9px 12px}
+.sc .b{font-size:13px}
+.sc .ph-top{padding:9px 12px}
+.flag{background:var(--model-soft);border-radius:10px;padding:10px 12px;font-size:14.5px}
+.flag b{color:var(--model)}
+.added{font:500 10.5px var(--f-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--model);margin-left:6px}
+
+/* reality */
+.stack{display:flex;height:34px;border-radius:8px;overflow:hidden;font:500 13px var(--f-mono)}
+.stack div{display:flex;align-items:center;padding-inline:10px;white-space:nowrap;overflow:hidden}
+.stack .a{background:var(--ok);color:var(--surface)}
+.stack .h{background:var(--model-fill);color:#2a1a00}
+.stack .x{background:var(--bad);color:var(--surface)}
+.key{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:14.5px;color:var(--muted)}
+.key span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--c);margin-right:6px}
+.gaps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 28px}
+@media(max-width:760px){.gaps{grid-template-columns:1fr}}
+.gaps div{border-top:2px solid var(--line);padding-top:12px;font-size:15.5px;display:flex;flex-direction:column;gap:6px}
+.gaps b{font-family:var(--f-display);font-size:17px}
+footer{margin-top:64px;border-top:1px solid var(--line);padding-top:16px;font-size:14px;color:var(--muted);display:flex;flex-direction:column;gap:6px}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+<header>
+  <span class="eyebrow">Design share · Conversational Design Systems</span>
+  <h1>The Corredor control plane</h1>
+  <p class="thesis"><span class="p">The product owns meaning.</span> <span class="m">The model owns expression.</span></p>
+  <p class="lede">María wants to send $900 to her mom in Oaxaca over WhatsApp. It's her first transfer, it crosses a regulatory threshold, and a fluent AI could easily promise something the company can't keep. Follow her message through the layer that sits between the business and the model: the experience control plane.</p>
+</header>
+
+<section aria-labelledby="layers-h">
+  <h2 id="layers-h">Three layers, three owners</h2>
+  <div class="layers">
+    <div class="layer" style="--c:var(--ink)"><span class="verb">Designed</span><h3>Intent</h3><p>What María and the product are trying to do. Designers map it into flows before anything is generated.</p><ul><li>Send money today</li><li>Required and optional moments</li></ul></div>
+    <div class="layer" style="--c:var(--rule)"><span class="verb">Governed</span><h3>Commitments</h3><p>Facts, disclosures and permissions that must hold on every turn. Product, legal and engineering own them.</p><ul><li>ID check above $500</li><li>Delays must be disclosed</li><li>Confirm only when authorized</li></ul></div>
+    <div class="layer" style="--c:var(--model)"><span class="verb">Generated</span><h3>Expression</h3><p>The actual words and layout. The model has freedom here, inside a contract.</p><ul><li>Warm, plain Mexican Spanish</li><li>WhatsApp text, voice, or UI</li></ul></div>
+  </div>
+  <div class="cast"><span>Three kinds of actors run the steps below:</span><span class="pair"><span class="who jev">Jev</span> picks from fixed options, fast, never writes</span><span class="pair"><span class="who rule">Rules</span> product-owned code and contracts</span><span class="pair"><span class="who model">Model</span> writes the words</span></div>
+</section>
+
+<section aria-labelledby="walk-h">
+  <div class="head" style="display:flex;flex-direction:column;gap:8px">
+    <span class="eyebrow">Walkthrough</span>
+    <h2 id="walk-h">One message, six moves</h2>
+    <p class="lede">The dots on each step show who acts. Notice how late the writing model shows up.</p>
+  </div>
+  <div class="stepper" role="tablist" id="stepper" aria-label="Walkthrough steps"></div>
+  <div class="walk">
+    <div class="phone" id="phone">
+      <div class="ph-top"><div class="av">C</div><div><b>Corredor</b><small>WhatsApp</small></div>
+        <div class="lang" role="group" aria-label="Chat language"><button data-l="en" aria-pressed="true">EN</button><button data-l="es" aria-pressed="false">ES</button></div></div>
+      <div class="chat" id="chat" aria-live="polite"></div>
+    </div>
+    <div class="stage" id="stage"></div>
+  </div>
+</section>
+
+<section aria-labelledby="scen-h">
+  <span class="eyebrow">Same rules, different conversations</span>
+  <h2 id="scen-h">What adapts, and what never does</h2>
+  <p class="lede">Four runs through the same control plane. The words and the flow change. The disclosures and the lock on Confirm don't.</p>
+  <div class="scen" id="scen"></div>
+</section>
+
+<section aria-labelledby="next-h">
+  <span class="eyebrow">Notes from building this</span>
+  <h2 id="next-h">Where the demo could go next</h2>
+  <p class="lede">The repo is deliberately small, and its README names what it leaves out. Walking through it as designers, four ideas came up that would make the control plane even easier to see.</p>
+  <div class="gaps">
+    <div><span class="who rule" style="align-self:flex-start">Flow</span><b>Design the review moment</b><span class="small">At $1,200 the runtime correctly keeps Confirm locked, but the flow has no moment that tells María a person will review the transfer. A “human review” step with its own contract would close that loop.</span></div>
+    <div><span class="who rule" style="align-self:flex-start">Contracts</span><b>Let every artifact drive the run</b><span class="small">The renderer, locale and action contracts are clearly specified but not yet read at runtime. Today the right behavior comes from flow order and the authority check. Wiring them in would make “architecture you can express in code” visible end to end.</span></div>
+    <div><span class="who jev" style="align-self:flex-start">Jev</span><b>Check meaning, not keywords</b><span class="small">The keyword checks are a clear teaching device, but they can pass a sentence that says verification isn't required (step 6). A System One verifier in that slot, and in the intent slot, would show where Jev fits in the runtime.</span></div>
+    <div><span class="who rule" style="align-self:flex-start">Replay</span><b>Record why words were replaced</b><span class="small">When the off-script model is caught, the saved record lists the replacement's passing checks rather than the original's four failures. Logging both would let the replay tell the whole story.</span></div>
+  </div>
+</section>
+
+<footer>
+  <span>Built from a run of Kyle Cooney's <a href="https://github.com/kyle-c/corredor-control-plane">kyle-c/corredor-control-plane</a> plus one added $1,200 run. Chat text is the repo's actual output; English is our translation. Jev values are illustrative, following <a href="https://docs.typesafe.ai/introduction/quickstart">TypeSafe's API docs</a> and <a href="https://typesafe.ai/blog/introducing-system-one-models-and-jev">launch post</a>. Confidence cutoffs use the docs' example floor of 0.5 and high-stakes bar of 0.9.</span>
+</footer>
+</div>
+
+<script>
+const T={
+ me:["Can I send $900 to my mom in Oaxaca today?","¿Puedo mandar $900 a mi mamá en Oaxaca hoy?"],
+ me12:["Can I send $1,200 to my mom in Oaxaca today?","¿Puedo mandar $1,200 a mi mamá en Oaxaca hoy?"],
+ rate:["Today your rate is 18.20 pesos per dollar and the fee is $4.99. Both amounts are locked in when you confirm.","Hoy tu cambio es de 18.20 pesos por dolar y la comision es de $4.99. Los dos montos quedan fijos al confirmar."],
+ idv1:["Since this is your first transfer, let me explain an important step. To send $900, identity verification is required. Your transfer may be delayed while we complete it. You can upload your INE or passport right here, or message support if you need help.","Como es tu primer envio, te explico un paso importante. Para enviar $900, la verificacion de identidad es un requisito. Tu envio puede tardar mientras la completamos. Puedes subir tu INE o pasaporte aqui mismo, o escribir a soporte si necesitas ayuda."],
+ idv2:["To send $900, identity verification is required. Your transfer may be delayed while we complete it. You can upload your INE or passport right here, or message support if you need help.","Para enviar $900, la verificacion de identidad es un requisito. Tu envio puede tardar mientras la completamos. Puedes subir tu INE o pasaporte aqui mismo, o escribir a soporte si necesitas ayuda."],
+ idv12:["To send $1,200, identity verification is required. Your transfer may be delayed while we complete it. You can upload your INE or passport right here, or message support if you need help.","Para enviar $1200, la verificacion de identidad es un requisito. Tu envio puede tardar mientras la completamos. Puedes subir tu INE o pasaporte aqui mismo, o escribir a soporte si necesitas ayuda."],
+ tmpl:["To send more than $500, we need to verify your identity. It's required and your transfer may be delayed while we complete it. You can upload your INE or passport here, or message support if you need help.","Para enviar mas de $500, necesitamos verificar tu identidad. Es un requisito y tu envio puede tardar mientras lo completamos. Puedes subir tu INE o pasaporte aqui, o escribir a soporte si necesitas ayuda."],
+ warm:["Good news: you're almost done. Just a quick identity check and your money arrives today. Don't worry about a thing.","Buenas noticias: ya casi terminas. Solo una rapida verificacion de identidad y tu dinero llega hoy mismo. No te preocupes por nada."],
+ opts:["You have two options: bank deposit (1–2 days) or cash pickup in Oaxaca (available tomorrow).","Tienes dos opciones: deposito a cuenta (1-2 dias) o retiro en efectivo en Oaxaca (disponible manana)."],
+ review:["Review the details: $900 to your recipient in Oaxaca. Confirm when you're ready.","Revisa los datos: $900 para tu destinataria en Oaxaca. Confirma cuando estes lista."],
+ review12:["Review the details: $1,200 to your recipient in Oaxaca. Confirm when you're ready.","Revisa los datos: $1200 para tu destinataria en Oaxaca. Confirma cuando estes lista."],
+ on:["Confirm transfer","Confirmar transferencia"], off:["Confirm — locked","Confirmar — deshabilitado"]
+};
+const t=k=>`<span class="en">${T[k][0]}</span><span class="es">${T[k][1]}</span>`;
+const B={
+ me:k=>`<div class="b me">${t(k)}</div>`,
+ sys:k=>`<div class="b">${t(k)}</div>`,
+ ghost:(l,opt)=>`<div class="b ghost${opt?' opt':''}">${l}</div>`,
+ note:(s,c)=>`<div class="note ${c||''}">${s}</div>`,
+ typing:`<div class="typing" aria-label="Corredor is working"><i></i><i></i><i></i></div>`,
+ rej:`<div class="b rej"><s>${t('warm')}</s><span class="why">Blocked: failed 4 of 4 checks. Never sent.</span></div>`,
+ fixed:k=>`<div class="b">${t(k)}<span class="fix">Approved wording used instead</span></div>`,
+ cta:on=>`<div class="cta ${on?'on':'off'}">${t(on?'on':'off')}</div>`
+};
+let offScript=false;
+const STEPS=[
+ {short:"Understand",roles:["jev"],title:"Understand what she wants",
+  lede:"Before anything writes a word, a fast classifier decides what María is asking for. It picks from a fixed list and reports how sure it is. Confidence decides the next move.",
+  phone:()=>B.me('me')+B.typing+B.note('Jev → send money today · 93%','jev'),
+  body:()=>`<div class="panel jevp"><div class="ptitle"><strong>Jev reads the message</strong><span class="illus">Illustrative values</span></div>
+   <p class="q">“What is the customer trying to do?”</p>
+   <div class="bars">${[["Send money now",96,1],["Ask about the rate",3],["Track a transfer",1],["Get support",0]].map(([l,v,top])=>`<div class="bar${top?' top':''}"><span>${top?'<b>'+l+'</b>':l}</span><div class="track"><div class="fill" style="width:${Math.max(v,1)}%"></div></div><span class="v">${v<1?'<1':v}%</span></div>`).join('')}</div>
+   <div class="meter"><span class="mark" style="left:93%">0.93</span><div class="zones"><div style="flex:50;background:var(--bad-soft)"></div><div style="flex:40;background:var(--model-soft)"></div><div style="flex:10;background:var(--ok-soft)"></div></div><div class="lbls"><span style="--w:50">Below 0.5: hand to a person</span><span style="--w:40">0.5–0.9: ask her to clarify</span><span style="--w:10;text-align:right">Go</span></div></div>
+   </div>
+   <p class="small">Jev answers with options and odds, never sentences, so nothing has been promised yet. A wrong guess here sends María into the wrong flow, which is why the bar to proceed is high. In the repo, the intent arrives already set; this is the slot the book gives Jev.</p>
+   <p class="law">Law 6 · Intent is designed. Commitments are governed. Expression is generated.</p>`},
+ {short:"Gather facts",roles:["rule","jev"],title:"Gather only facts with a source",
+  lede:"The context compiler collects what the reply is allowed to rely on. Every fact carries where it came from. A superseded policy is known to the system and deliberately kept away from the model.",
+  phone:()=>B.me('me')+B.typing+B.note('4 facts admitted · 1 stale fact excluded'),
+  body:()=>`<div class="panel"><div class="ptitle"><strong>Context packet</strong><span class="who rule">Rules</span></div>
+   <div class="facts">
+    <div class="fact"><span>ID verification required above $500</span><span class="src">Identity policy v12</span></div>
+    <div class="fact"><span>Transfers may be delayed during verification</span><span class="src">Identity policy v12</span></div>
+    <div class="fact"><span>Accepted IDs: INE or passport</span><span class="src">Mexico documents guide</span></div>
+    <div class="fact"><span>She's a first-time sender</span><span class="src">Memory · 78% sure</span></div>
+    <div class="fact stale"><span>Old delay policy</span><span class="src">Superseded · excluded</span></div>
+   </div></div>
+   <div class="panel jevp"><div class="ptitle"><strong>Jev can supply that last judgment</strong><span class="illus">Illustrative</span></div>
+   <p class="q">“How familiar is this sender with international transfers?”</p>
+   <div class="bars"><div class="bar top"><span><b>First-time sender</b></span><div class="track"><div class="fill" style="width:78%"></div></div><span class="v">78%</span></div><div class="bar"><span>Knows the drill</span><div class="track"><div class="fill" style="width:22%"></div></div><span class="v">22%</span></div></div>
+   <p class="small">The repo hard-codes this 78%. A calibrated classifier would produce it from her history. The stakes are low: a wrong guess only adds or skips an optional explainer.</p></div>
+   <p class="law">Law 10 · No context without provenance.</p>`},
+ {short:"Check rules",roles:["rule","jev"],title:"Check what's required and what's allowed",
+  lede:"Two separate questions, both answered by plain code before anything is shown. Policy asks what the rules require. Authority asks whether this person may act right now.",
+  phone:()=>B.me('me')+B.typing+B.note('ID check required · Confirm locked'),
+  body:()=>`<div class="panel"><div class="ptitle"><strong>Policy</strong><span class="who rule">Rules</span></div>
+   <p>$900 is over the $500 threshold, so <b>identity verification is required</b>. Over $1,000, a person must also review the transfer.</p></div>
+   <div class="panel"><div class="ptitle"><strong>Authority to send money</strong><span class="who rule">Rules</span></div>
+   <div class="checks"><div class="chk y"><i>✓</i>Signed in</div><div class="chk y"><i>✓</i>Quote still valid</div><div class="chk n"><i></i>Recipient confirmed</div><div class="chk n"><i></i>Disclosure acknowledged</div></div>
+   <div class="verdict">Result <span class="lockbtn">Confirm — locked</span></div>
+   <p class="small">The interface never offers a button the system already knows it can't honor.</p></div>
+   <div class="panel jevp"><div class="ptitle"><strong>Jev reads the evidence, not the verdict</strong><span class="illus">Illustrative</span></div>
+   <p>If María replies “sí, es para mi mamá Rosa,” Jev can answer <span class="q" style="font-size:16px">“Did she confirm the recipient?”</span> with <b>yes, 97%</b>.</p>
+   <p class="small">That only pre-fills the checkbox. The rule itself stays code, and money moves only on her explicit tap, which is what the authority file asks to record.</p></div>
+   <p class="law">Law 9 · No capability without authority.</p>`},
+ {short:"Shape the flow",roles:["rule"],title:"Compose the flow before writing it",
+  lede:"The experience graph is the designed conversation: which moments must happen, which are optional, and what's locked. The planner may trim optional moments for an experienced sender. Required ones are never its to touch.",
+  phone:()=>B.me('me')+B.ghost('Rate & fee · required')+B.ghost('ID verification · required')+B.ghost('Delivery options · optional',1)+B.ghost('Confirm · locked'),
+  body:()=>`<div class="panel"><div class="ptitle"><strong>First transfer confirmation flow</strong><span class="who rule">Rules</span></div>
+   <div class="flow">
+    <div class="node"><small class="req">Required</small><b>Rate &amp; fee</b><small>Shown before Confirm</small></div><span class="arrow"></span>
+    <div class="node"><small class="req">Required</small><b>ID verification</b><small>Shown before Confirm</small></div><span class="arrow"></span>
+    <div class="node opt"><small>Optional</small><b>Delivery options</b><small>Planner may skip</small></div><span class="arrow"></span>
+    <div class="node lock"><small class="req">Required</small><b>Confirm</b><small>Locked by authority</small></div>
+   </div>
+   <p>Planner decision: <b>first-time sender, keep everything.</b> Compare the returning sender below, where delivery options drop out.</p></div>
+   <p class="small">This is where designers spend their time in this model: designing moments and their rules, not individual responses.</p>
+   <p class="law">Law 8 · Compose the experience before you render it.</p>`},
+ {short:"Write",roles:["model","rule"],title:"Write the words, inside a contract",
+  lede:"Only now does a language model write. For the ID-verification moment it writes under a conversation contract: what it must say, what it must never say, and what happens if it fails.",
+  phone:()=>B.me('me')+B.sys('rate')+(offScript?B.rej+B.fixed('tmpl'):B.sys('idv1'))+B.sys('opts'),
+  body:()=>`<div class="panel"><div class="ptitle"><strong>Contract: explain ID verification</strong><span class="who rule">Rules</span></div>
+   <div class="contract"><div><p class="eyebrow">Must</p><ul class="must"><li>Say verification is required</li><li>Say the transfer may be delayed</li><li>Offer a next step</li></ul></div>
+   <div><p class="eyebrow">Must not</p><ul class="not"><li>Imply it's optional</li><li>Promise when money arrives</li></ul></div></div>
+   <p class="small">If the output fails, it is replaced by approved wording. A stiff, accurate sentence beats a fluent omission.</p></div>
+   <button class="toggle" id="offscript" aria-pressed="${offScript}"><span class="sw"></span><span><b>Swap in an off-script model</b><br><span class="small">One that's warm, fluent, and wrong.</span></span></button>
+   ${offScript?`<div class="panel"><div class="ptitle"><strong>The checks catch it</strong><span class="who model">Model</span></div><p>It promised same-day delivery and called verification quick. It failed every check:</p><div class="results"><span class="res">✕ says it's required</span><span class="res">✕ discloses delay</span><span class="res">✕ no time promise</span><span class="res">✕ offers next step</span></div><p class="small">Nothing else changed. Same facts, same flow, same lock on Confirm. Only the words were swapped back.</p></div>`:''}
+   <p class="law">Law 2 · The model is replaceable. The promises are not.</p>`},
+ {short:"Check & record",roles:["rule","jev"],title:"Check it, show it, record it",
+  lede:"Every message is checked before it's sent, the screen follows its own rules, and the whole turn is saved so anyone can replay why it happened.",
+  phone:()=>B.me('me')+B.sys('rate')+(offScript?B.fixed('tmpl'):B.sys('idv1'))+B.sys('opts')+B.cta(false)+B.note('Turn saved for replay'),
+  body:()=>`<div class="trio">
+   <div class="panel jevp"><div class="ptitle"><strong>Check</strong><span class="who jev">Jev fits</span></div>
+    <p class="small" style="color:var(--ink)">Today the checks are keyword matches. We ran two sentences through them:</p>
+    <div class="quote wrong"><span class="tag">Wrong, passes 4 of 4</span>“It's not a requirement, though it may take a while if you choose to do it.”</div>
+    <div class="quote right"><span class="tag">Right, fails 3 of 4</span>“You'll need to verify your identity and the transfer could take longer.”</div>
+    <p class="small">Sentences translated from the Spanish we tested. Jev would check meaning instead: “Does this suggest verification is optional?”</p></div>
+   <div class="panel"><div class="ptitle"><strong>Show</strong><span class="who rule">Rules</span></div>
+    <p>Renderer rules for WhatsApp:</p><ul style="margin:0;padding-left:18px;font-size:15px"><li>Fee and delay visible before Confirm</li><li>Confirm active only when authorized</li><li>Never hide a required disclosure</li></ul></div>
+   <div class="panel"><div class="ptitle"><strong>Record</strong><span class="who rule">Rules</span></div>
+    <ol class="trail">
+     <li style="--c:var(--jev)"><span><b>Intent</b> send money · 93% <span class="small">(illustrative)</span></span></li>
+     <li><span><b>Facts</b> 4 in, 1 excluded</span></li>
+     <li><span><b>Policy</b> ID required</span></li>
+     <li><span><b>Authority</b> 2 conditions open</span></li>
+     <li><span><b>Flow</b> full, nothing skipped</span></li>
+     <li style="--c:var(--model-fill)"><span><b>Words</b> ${offScript?'replaced with approved wording':'passed contract'}</span></li>
+    </ol></div></div>
+   <p class="law">Law 15 · No autonomy without replay.</p>`}
+];
+let cur=0;
+const stepper=document.getElementById('stepper'),stage=document.getElementById('stage'),chat=document.getElementById('chat');
+STEPS.forEach((s,i)=>{const b=document.createElement('button');b.role='tab';b.id='tab'+i;b.innerHTML=`<span class="n">${i+1}</span><b>${s.short}</b><span class="dots">${s.roles.map(r=>`<i class="${r}"></i>`).join('')}</span>`;b.onclick=()=>go(i);stepper.appendChild(b)});
+function go(i){
+  cur=i;const s=STEPS[i];
+  [...stepper.children].forEach((b,j)=>{b.setAttribute('aria-selected',i===j);b.tabIndex=i===j?0:-1});
+  const roleLbl={jev:'Jev',rule:'Rules',model:'Model'};
+  stage.innerHTML=`<div class="head"><div class="roles">${s.roles.map(r=>`<span class="who ${r}">${roleLbl[r]}</span>`).join('')}</div><h3 style="font-size:26px">${i+1}. ${s.title}</h3><p class="lede">${s.lede}</p></div>${s.body()}
+   <div class="nav"><button class="prev" ${i===0?'disabled':''}>← Back</button><button class="next" ${i===STEPS.length-1?'disabled':''}>Next: ${STEPS[i+1]?STEPS[i+1].short:''} →</button></div>`;
+  chat.innerHTML=s.phone();
+  stage.querySelector('.prev').onclick=()=>go(i-1);
+  stage.querySelector('.next').onclick=()=>go(i+1);
+  const tg=document.getElementById('offscript'); if(tg) tg.onclick=()=>{offScript=!offScript;go(cur);document.getElementById('offscript').focus()};
+}
+stepper.addEventListener('keydown',e=>{if(e.key==='ArrowRight'&&cur<5){go(cur+1);stepper.children[cur].focus()}if(e.key==='ArrowLeft'&&cur>0){go(cur-1);stepper.children[cur].focus()}});
+
+const SC=[
+ {h:"First-time sender",cap:"The full flow. Confirm stays locked until she confirms the recipient and accepts the disclosure.",chat:B.me('me')+B.sys('rate')+B.sys('idv1')+B.sys('opts')+B.cta(false)},
+ {h:"Returning sender",cap:"Optional education collapses and Confirm unlocks. The ID disclosure stays, minus the first-timer intro.",chat:B.me('me')+B.sys('rate')+B.sys('idv2')+B.note('Delivery options skipped')+B.sys('review')+B.cta(true)},
+ {h:"Off-script model",cap:"The model promised same-day delivery. The contract blocked it and used approved wording.",chat:B.me('me')+B.sys('rate')+B.rej+B.fixed('tmpl')+B.sys('opts')+B.cta(false)},
+ {h:"Over $1,000",added:1,cap:"Every condition passes, but a person must review, so Confirm stays locked.",chat:B.me('me12')+B.sys('rate')+B.sys('idv12')+B.note('Delivery options skipped')+B.sys('review12')+B.cta(false),
+  flag:"<b>Open question:</b> she's told to “confirm when you're ready” above a locked button, and no message says a person will review. The flow has no moment designed for this case."}
+];
+document.getElementById('scen').innerHTML=SC.map(s=>`<div class="sc"><h3>${s.h}${s.added?'<span class="added">Added run</span>':''}</h3><p class="cap">${s.cap}</p><div class="phone"><div class="ph-top"><div class="av">C</div><div><b>Corredor</b><small>WhatsApp</small></div></div><div class="chat">${s.chat}</div></div>${s.flag?`<div class="flag">${s.flag}</div>`:''}</div>`).join('');
+
+function setLang(l){document.body.classList.toggle('show-es',l==='es');document.querySelectorAll('.lang button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.l===l));try{localStorage.setItem('corredor-lang',l)}catch(e){}}
+document.querySelectorAll('.lang button').forEach(b=>b.onclick=()=>setLang(b.dataset.l));
+try{if(localStorage.getItem('corredor-lang')==='es')setLang('es')}catch(e){}
+go(0);
+</script>
+</body>
+</html>
